@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OTP Test Mailer</title>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  :root {
+    --ink: #1c2b2e;
+    --paper: #f3f1ec;
+    --line: #d8d3c7;
+    --teal: #2f6f6a;
+    --teal-dark: #1f4d49;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 32px;
+  }
+  h1 {
+    font-size: 21px;
+    margin: 0 0 6px;
+  }
+  p.lead {
+    margin: 0 0 24px;
+    color: #5a655f;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  input[type="email"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+  input[type="email"]:focus {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+  }
+  button {
+    width: 100%;
+    padding: 11px;
+    border: none;
+    border-radius: 6px;
+    background: var(--teal);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--teal-dark); }
+  button:disabled { background: #a9b6b3; cursor: not-allowed; }
+  #status {
+    margin-top: 16px;
+    font-size: 13.5px;
+    min-height: 20px;
+  }
+  #status.ok { color: var(--teal-dark); }
+  #status.err { color: #b3432b; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>OTP Test Mailer</h1>
+  <p class="lead">Enter any inbox. It generates a 6-digit code and sends it through your EmailJS template.</p>
+
+  <form id="otpForm">
+    <label for="toEmail">Recipient email</label>
+    <input type="email" id="toEmail" required placeholder="name@example.com">
+    <button type="submit" id="sendBtn">Send OTP</button>
+  </form>
+
+  <p id="status"></p>
+</div>
+
+<script>
+  // --- Fill these three in before deploying ---
+  const PUBLIC_KEY  = "YOUR_PUBLIC_KEY";
+  const SERVICE_ID  = "YOUR_SERVICE_ID";
+  const TEMPLATE_ID = "template_bxa4kxj";
+  // ---------------------------------------------
+
+  emailjs.init(PUBLIC_KEY);
+
+  function generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  const form = document.getElementById('otpForm');
+  const btn = document.getElementById('sendBtn');
+  const status = document.getElementById('status');
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const toEmail = document.getElementById('toEmail').value.trim();
+    const otp = generateOTP();
+
+    btn.disabled = true;
+    status.className = '';
+    status.textContent = 'Sending...';
+
+    emailjs.send(SERVICE_ID, TEMPLATE_ID, {
+      to_email: toEmail,
+      otp_code: otp
+    }).then(function () {
+      status.className = 'ok';
+      status.textContent = 'Sent to ' + toEmail + ' — code was ' + otp;
+      btn.disabled = false;
+    }, function (error) {
+      status.className = 'err';
+      status.textContent = 'Failed: ' + (error && error.text ? error.text : JSON.stringify(error));
+      btn.disabled = false;
+    });
+  });
+</script>
+
+</body>
+</html>
