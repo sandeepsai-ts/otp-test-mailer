@@ -12,6 +12,7 @@
     --line: #d8d3c7;
     --teal: #2f6f6a;
     --teal-dark: #1f4d49;
+    --err: #b3432b;
   }
   * { box-sizing: border-box; }
   body {
@@ -33,34 +34,19 @@
     border-radius: 10px;
     padding: 32px;
   }
-  h1 {
-    font-size: 21px;
-    margin: 0 0 6px;
-  }
-  p.lead {
-    margin: 0 0 24px;
-    color: #5a655f;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-  label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  input[type="email"] {
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  p.lead { margin: 0 0 24px; color: #5a655f; font-size: 14px; line-height: 1.5; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  input {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--line);
     border-radius: 6px;
     font-size: 14px;
     margin-bottom: 18px;
+    letter-spacing: 0.3px;
   }
-  input[type="email"]:focus {
-    outline: 2px solid var(--teal);
-    outline-offset: 1px;
-  }
+  input:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
   button {
     width: 100%;
     padding: 11px;
@@ -74,68 +60,160 @@
   }
   button:hover { background: var(--teal-dark); }
   button:disabled { background: #a9b6b3; cursor: not-allowed; }
-  #status {
-    margin-top: 16px;
+  button.secondary {
+    background: transparent;
+    color: var(--teal-dark);
+    border: 1px solid var(--line);
+    margin-top: 10px;
+  }
+  button.secondary:hover { background: #f3f1ec; }
+  #status, #verifyStatus {
+    margin-top: 4px;
     font-size: 13.5px;
     min-height: 20px;
   }
-  #status.ok { color: var(--teal-dark); }
-  #status.err { color: #b3432b; }
+  .ok { color: var(--teal-dark); }
+  .err { color: var(--err); }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 
 <div class="card">
-  <h1>OTP Test Mailer</h1>
-  <p class="lead">Enter any inbox. It generates a 6-digit code and sends it through your EmailJS template.</p>
 
-  <form id="otpForm">
-    <label for="toEmail">Recipient email</label>
-    <input type="email" id="toEmail" required placeholder="name@example.com">
-    <button type="submit" id="sendBtn">Send OTP</button>
-  </form>
+  <div id="sendStep">
+    <h1>OTP Test Mailer</h1>
+    <p class="lead">Enter any inbox. A 6-digit code is sent through your EmailJS template — you'll enter it on the next screen to verify.</p>
 
-  <p id="status"></p>
+    <form id="otpForm">
+      <label for="toEmail">Recipient email</label>
+      <input type="email" id="toEmail" required placeholder="name@example.com">
+      <button type="submit" id="sendBtn">Send OTP</button>
+    </form>
+
+    <p id="status"></p>
+  </div>
+
+  <div id="verifyStep" class="hidden">
+    <h1>Enter the code</h1>
+    <p class="lead">We sent a code to <strong id="sentTo"></strong>. It's valid for 15 minutes.</p>
+
+    <form id="verifyForm">
+      <label for="codeInput">6-digit code</label>
+      <input type="text" id="codeInput" inputmode="numeric" maxlength="6" required placeholder="123456">
+      <button type="submit" id="verifyBtn">Verify</button>
+    </form>
+
+    <p id="verifyStatus"></p>
+
+    <button type="button" class="secondary" id="resendBtn">Send a new code</button>
+  </div>
+
 </div>
 
 <script>
-  // --- Fill these three in before deploying ---
+  // --- Keep your real values here (don't reset to placeholders) ---
   const PUBLIC_KEY  = "dg2arTL7NBxNukCKS";
   const SERVICE_ID  = "service_t90dfoa";
   const TEMPLATE_ID = "template_bxa4kxj";
-  // ---------------------------------------------
+  // ------------------------------------------------------------------
 
   emailjs.init(PUBLIC_KEY);
+
+  const OTP_VALID_MINUTES = 15;
+
+  let currentOTP = null;
+  let expiresAt = null;
+  let recipient = null;
 
   function generateOTP() {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  const form = document.getElementById('otpForm');
-  const btn = document.getElementById('sendBtn');
-  const status = document.getElementById('status');
+  function formatExpiry(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    const toEmail = document.getElementById('toEmail').value.trim();
+  const sendStep      = document.getElementById('sendStep');
+  const verifyStep    = document.getElementById('verifyStep');
+  const otpForm       = document.getElementById('otpForm');
+  const sendBtn       = document.getElementById('sendBtn');
+  const status        = document.getElementById('status');
+  const sentTo        = document.getElementById('sentTo');
+  const verifyForm    = document.getElementById('verifyForm');
+  const verifyBtn     = document.getElementById('verifyBtn');
+  const verifyStatus  = document.getElementById('verifyStatus');
+  const codeInput     = document.getElementById('codeInput');
+  const resendBtn     = document.getElementById('resendBtn');
+
+  function sendOTP(toEmail) {
     const otp = generateOTP();
+    const expiry = new Date(Date.now() + OTP_VALID_MINUTES * 60000);
 
-    btn.disabled = true;
+    sendBtn.disabled = true;
     status.className = '';
     status.textContent = 'Sending...';
 
+    // Parameter names below must match the template's variables exactly:
+    // {{to_email}}, {{passcode}}, {{time}}
     emailjs.send(SERVICE_ID, TEMPLATE_ID, {
       to_email: toEmail,
-      otp_code: otp
+      passcode: otp,
+      time: formatExpiry(expiry)
     }).then(function () {
+      currentOTP = otp;
+      expiresAt = expiry;
+      recipient = toEmail;
+
       status.className = 'ok';
-      status.textContent = 'Sent to ' + toEmail + ' — code was ' + otp;
-      btn.disabled = false;
+      status.textContent = 'Sent.';
+      sendBtn.disabled = false;
+
+      sentTo.textContent = toEmail;
+      codeInput.value = '';
+      verifyStatus.textContent = '';
+      sendStep.classList.add('hidden');
+      verifyStep.classList.remove('hidden');
+      codeInput.focus();
     }, function (error) {
       status.className = 'err';
       status.textContent = 'Failed: ' + (error && error.text ? error.text : JSON.stringify(error));
-      btn.disabled = false;
+      sendBtn.disabled = false;
     });
+  }
+
+  otpForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const toEmail = document.getElementById('toEmail').value.trim();
+    sendOTP(toEmail);
+  });
+
+  verifyForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const entered = codeInput.value.trim();
+
+    if (Date.now() > expiresAt.getTime()) {
+      verifyStatus.className = 'err';
+      verifyStatus.textContent = 'This code expired. Send a new one.';
+      return;
+    }
+
+    if (entered === currentOTP) {
+      verifyStatus.className = 'ok';
+      verifyStatus.textContent = 'Verified.';
+      verifyBtn.disabled = true;
+    } else {
+      verifyStatus.className = 'err';
+      verifyStatus.textContent = "That code doesn't match. Try again.";
+    }
+  });
+
+  resendBtn.addEventListener('click', function () {
+    verifyStep.classList.add('hidden');
+    sendStep.classList.remove('hidden');
+    verifyBtn.disabled = false;
+    document.getElementById('toEmail').value = recipient || '';
+    status.textContent = '';
   });
 </script>
 
